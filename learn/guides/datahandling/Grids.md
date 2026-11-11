@@ -820,6 +820,64 @@ While a grid edits, the cells of its columns that cannot be edited carry `aria-r
 carry nothing. The marks follow the configuration: a column turned non-editable at runtime is read-only in every
 rendered row, and a disabled or destroyed plugin leaves no cell read-only.
 
+## Exporting and Reading Cell Values
+
+### CSV Text
+
+Call `grid.toCsv()` to get CSV text. By default, `delimiter` is `','`, `escapeFormulas` is `true`, and `header` is
+`true`. Set `header: false` to omit the column headings. Formula escaping prefixes strings that start with `=`, `+`,
+`-`, `@`, a tab or a carriage return with an apostrophe so a spreadsheet does not execute them; numbers are not
+prefixed. Set `escapeFormulas: false` only when the output does not need that protection.
+
+```javascript readonly
+const csv = grid.toCsv();
+const withoutHeader = grid.toCsv({delimiter: ';', escapeFormulas: true, header: false});
+```
+
+Rows follow the store's current filter and sort, including rows the buffered grid has not rendered. Columns with a
+`dataField` appear in display order: locked start, center, then locked end. The header line uses the column header
+text. CSV fields are quoted when needed, lines end in CRLF, dates use ISO 8601, and null values become empty fields.
+
+### Downloading CSV
+
+```javascript readonly
+await grid.exportCsv({fileName: 'customers.csv'});
+```
+
+`exportCsv()` accepts the same options as `toCsv()`, plus `fileName`, which defaults to `'export.csv'`. A worker
+cannot start a download, so `Neo.main.addon.FileDownload` performs it on the main thread; the addon is loaded on demand.
+The returned promise resolves to `true` once the browser has the download.
+
+### Formatting Exported Values
+
+Set `exportRenderer` on a column to replace its exported cell value. It receives `{record, value}`, where `value` is
+the value read from the record. A column's `renderer` produces markup for display and is never exported; use
+`exportRenderer` when the export needs its own formatting.
+
+```javascript readonly
+columns: [{
+    dataField     : 'revenue',
+    exportRenderer: ({value}) => value == null ? '' : value.toFixed(2),
+    text          : 'Revenue'
+}]
+```
+
+### Reading Cell Values
+
+`grid.dataFields` lists the `dataField` of each column that has one, in display order. `grid.getCellValues()` returns
+`values[rowIndex][columnIndex]`. By default it reads those fields and `grid.store.items`; pass `dataFields` and
+`records` to choose columns and rows in the order supplied.
+
+```javascript readonly
+const fields = grid.dataFields;
+const record = grid.store.items[0]; // Assume the store has at least one record
+const values = grid.getCellValues({dataFields: ['revenue'], mode: 'raw', records: [record]});
+```
+
+The default `mode: 'export'` uses `exportRenderer` when present, converts `undefined` to `null`, and converts objects
+and arrays other than dates to JSON text. `mode: 'raw'` returns the value read from the record unchanged and does not
+call `exportRenderer`. For a `dataField` no column carries, raw mode yields `undefined` and export mode yields `null`.
+
 ## Performance and Big Data
 
 The grid is designed for exceptional performance, especially when dealing with large datasets. Its virtual rendering
